@@ -2,13 +2,13 @@ import time
 import pandas as pd
 import re
 import os
+import platform
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.edge.service import Service
 from selenium.webdriver.edge.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.microsoft import EdgeChromiumDriverManager  # optional on Windows
 
 # Load Excel file
 file_path = "pan.xlsx"
@@ -23,6 +23,16 @@ if "PAN" not in df.columns:
     print(f"Error: 'PAN' column not found! Available columns: {df.columns.tolist()}")
     exit()
 
+# Added support for multiple OS
+current_os = platform.system()
+driver_folder = os.path.dirname(os.path.abspath(__file__))
+if current_os == "Windows":
+    driver_path = os.path.join(driver_folder, "msedgedriver.exe")
+elif current_os == "Linux":
+    driver_path = os.path.join(driver_folder, "msedgedriver")
+else:
+    raise Exception(f"Unsupported OS: {current_os}")
+
 # Set up Edge WebDriver in headless mode
 options = Options()
 options.add_argument("--headless")
@@ -31,12 +41,12 @@ options.add_argument("--log-level=3")
 options.add_argument("--disable-blink-features=AutomationControlled")
 options.add_argument("--window-size=1920,1080")
 
-# --- Windows: Use webdriver-manager to auto-download driver ---
-service = Service(EdgeChromiumDriverManager().install())
+# Download Microsoft Edge for linux
+if current_os == "Linux":
+    options.binary_location = "/usr/bin/microsoft-edge-stable"
 
-# If you downloaded manually, use:
-# service = Service(r"C:\path\to\msedgedriver.exe")
-
+# Initialize driver:
+service = Service(driver_path)
 driver = webdriver.Edge(service=service, options=options)
 
 def solve_captcha():
