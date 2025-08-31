@@ -8,7 +8,7 @@ from selenium.webdriver.edge.service import Service
 from selenium.webdriver.edge.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.microsoft import EdgeChromiumDriverManager
+from webdriver_manager.microsoft import EdgeChromiumDriverManager  # optional on Windows
 
 # Load Excel file
 file_path = "pan.xlsx"
@@ -25,13 +25,18 @@ if "PAN" not in df.columns:
 
 # Set up Edge WebDriver in headless mode
 options = Options()
-options.add_argument("--headless")  
-options.add_argument("--disable-gpu")  
-options.add_argument("--log-level=3")  
-options.add_argument("--disable-blink-features=AutomationControlled")  
-options.add_argument("--window-size=1920,1080")  
+options.add_argument("--headless")
+options.add_argument("--disable-gpu")
+options.add_argument("--log-level=3")
+options.add_argument("--disable-blink-features=AutomationControlled")
+options.add_argument("--window-size=1920,1080")
 
+# --- Windows: Use webdriver-manager to auto-download driver ---
 service = Service(EdgeChromiumDriverManager().install())
+
+# If you downloaded manually, use:
+# service = Service(r"C:\path\to\msedgedriver.exe")
+
 driver = webdriver.Edge(service=service, options=options)
 
 def solve_captcha():
@@ -52,23 +57,18 @@ def fetch_pan_details(pan_number):
     driver.get(url)
     
     try:
-        # Wait for PAN input field and enter PAN
         pan_input = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.NAME, "pan")))
         pan_input.send_keys(str(pan_number))
         
-        # Solve captcha
         captcha_input = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.NAME, "captcha")))
         captcha_answer = solve_captcha()
         captcha_input.send_keys(captcha_answer)
         
-        # Click the search button
         search_button = driver.find_element(By.XPATH, "//button[contains(text(),'Search')]")
         search_button.click()
 
-        # Wait for results to load
         WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, "//td[contains(text(),'Office')]")))
         
-        # Extract data
         details = {"PAN": pan_number}
         fields = {
             "Office": "Office",
@@ -89,13 +89,11 @@ def fetch_pan_details(pan_number):
             except:
                 details[key] = "#NA"
 
-        # Extract "Non-filer" (under "Income Tax") from the **third column**
         try:
             details["Non-filer:"] = driver.find_element(By.XPATH, "//td[contains(text(),'Income Tax')]/following-sibling::td[2]").text
         except:
             details["Non-filer:"] = "#NA"
 
-        # Extract "Non-filer since" (under "VAT") from the **third column**
         try:
             details["Non-filer since"] = driver.find_element(By.XPATH, "//td[contains(text(),'VAT')]/following-sibling::td[2]").text
         except:
@@ -113,13 +111,11 @@ for pan in df['PAN']:
     details = fetch_pan_details(pan)
     results.append(details)
     print(f"Processed PAN: {pan}")
-    time.sleep(1)  # Small delay to prevent rapid requests
+    time.sleep(1)
 
 # Save results to Excel
 output_df = pd.DataFrame(results)
 output_df.to_excel("pan_results.xlsx", index=False, engine='openpyxl')
 
-# Close the browser
 driver.quit()
-
 print("Data extraction complete. Results saved in 'pan_results.xlsx'")
