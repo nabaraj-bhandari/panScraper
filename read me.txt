@@ -1,0 +1,129 @@
+step 1: install python
+step 2: open CMD > administrator 
+step 3: pip install pandas openpyxl selenium
+step 4: download web driver that is same as the browser version. 
+        (check your browser version in the settings) since mine is edge I have downloaded the matching driver version from the following link:
+	https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver/?form=MA13LH#downloads
+step 5: download web driver manager: pip install webdriver-manager
+step 6: Create a new folder named "Panscrapper" now create a "pan.xlsx" file inside the folder as well as paste the "msedgedriver.exe" as downloaded in step 4
+step 7: open notepad and paste the following code and save the file as python.py in the same folder location code is in (Appendix)
+step 8: get back to the cmd and go to the directory of "Panscrapper" folder and type python pan.py 
+* Now the data extraction will be completed in the new excel file:)
+
+Appendix:
+import time
+import pandas as pd
+import re
+import os
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.edge.service import Service
+from selenium.webdriver.edge.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.microsoft import EdgeChromiumDriverManager
+
+# Load Excel file
+file_path = "pan.xlsx"
+if not os.path.exists(file_path):
+    print(f"Error: File '{file_path}' not found!")
+    exit()
+
+df = pd.read_excel(file_path, engine='openpyxl')
+df.columns = df.columns.str.strip()  # Remove unwanted spaces
+
+if "PAN" not in df.columns:
+    print(f"Error: 'PAN' column not found! Available columns: {df.columns.tolist()}")
+    exit()
+
+# Set up Edge WebDriver in headless mode
+options = Options()
+options.add_argument("--headless")  # Run in background
+options.add_argument("--disable-gpu")  # Required for headless mode on some systems
+options.add_argument("--log-level=3")  # Reduce console log output
+options.add_argument("--disable-blink-features=AutomationControlled")  # Helps avoid bot detection
+options.add_argument("--window-size=1920,1080")  # Set window size
+
+service = Service(EdgeChromiumDriverManager().install())
+driver = webdriver.Edge(service=service, options=options)
+
+def solve_captcha():
+    """Extracts and solves the captcha question."""
+    try:
+        captcha_text = WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.XPATH, "//label[contains(text(),'What is')]"))
+        ).text
+        numbers = re.findall(r'\d+', captcha_text)
+        return str(sum(map(int, numbers)))
+    except Exception as e:
+        print("Error solving captcha:", e)
+        return ""
+
+def fetch_pan_details(pan_number):
+    """Fetches PAN details from the website and returns them as a dictionary."""
+    url = "https://ird.gov.np/pan-search"
+    driver.get(url)
+    
+    try:
+        # Wait for PAN input field and enter PAN
+        pan_input = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.NAME, "pan")))
+        pan_input.send_keys(str(pan_number))
+        
+        # Solve captcha
+        captcha_input = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.NAME, "captcha")))
+        captcha_answer = solve_captcha()
+        captcha_input.send_keys(captcha_answer)
+        
+        # Click the search button
+        search_button = driver.find_element(By.XPATH, "//button[contains(text(),'Search')]")
+        search_button.click()
+
+        # Wait for results to load
+        WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, "//td[contains(text(),'Office')]")))
+        
+        # Extract data
+        details = {"PAN": pan_number}
+        fields = {
+            "Office": "Office",
+            "Name": "Name",
+            "Telephone": "Telephone",
+            "Ward": "Ward",
+            "Street Name": "Street Name",
+            "City Name": "City Name",
+            "Income Tax": "Income Tax",
+            "Non-filer": "Non-filer:",
+            "VAT": "VAT",
+            "Non-filer since": "Non-filer since",
+            "VAT Filing Period": "VAT Filing Period",
+            "Fiscal Year / Return Verified Date": "Fiscal Year / Return Verified Date"
+        }
+        
+        for key, field in fields.items():
+            try:
+                details[key] = driver.find_element(By.XPATH, f"//td[contains(text(),'{field}')]/following-sibling::td").text
+            except:
+                details[key] = "#NA"
+        
+        return details
+    
+    except Exception as e:
+        print(f"Error processing PAN {pan_number}: {e}")
+        return {"PAN": pan_number, "Error": "Failed to fetch data"}
+
+# Fetch details for each PAN
+results = []
+for pan in df['PAN']:
+    details = fetch_pan_details(pan)
+    results.append(details)
+    print(f"Processed PAN: {pan}")
+    time.sleep(1)  # Small delay to prevent rapid requests
+
+# Save results to Excel
+output_df = pd.DataFrame(results)
+output_df.to_excel("pan_results.xlsx", index=False, engine='openpyxl')
+
+# Close the browser
+driver.quit()
+
+print("Data extraction complete. Results saved in 'pan_results.xlsx'")
