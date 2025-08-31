@@ -61,11 +61,14 @@ def solve_captcha():
         print("Error solving captcha:", e)
         return ""
 
+def is_normal_page():
+    try:
+        body_class = driver.find_element(By.TAG_NAME, "body").get_attribute("class")
+        return "frontpage" in body_class
+    except:
+        return False
+
 def fetch_pan_details(pan_number):
-    """Fetches PAN details from the website and returns them as a dictionary."""
-    url = "https://ird.gov.np/pan-search"
-    driver.get(url)
-    
     try:
         pan_input = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.NAME, "pan")))
         pan_input.send_keys(str(pan_number))
@@ -118,10 +121,20 @@ def fetch_pan_details(pan_number):
 # Fetch details for each PAN
 results = []
 for pan in df['PAN']:
-    details = fetch_pan_details(pan)
-    results.append(details)
-    print(f"Processed PAN: {pan}")
-    time.sleep(1)
+    while True:
+        driver.get("https://ird.gov.np/pan-search")
+
+        if not is_normal_page():
+            print(f"PAN {pan} - captcha page detected, retrying in 10s...")
+            time.sleep(10)
+            continue
+
+        # Normal page, scrape details
+        details = fetch_pan_details(pan)
+        results.append(details)
+        print(f"Processed PAN: {pan}")
+        time.sleep(1)
+        break 
 
 # Save results to Excel
 output_df = pd.DataFrame(results)
