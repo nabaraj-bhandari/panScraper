@@ -41,7 +41,7 @@ options.add_argument("--log-level=3")
 options.add_argument("--disable-blink-features=AutomationControlled")
 options.add_argument("--window-size=1920,1080")
 
-# Download Microsoft Edge for linux
+# Ensure latest version of Edge is used (Windows will automatically use the latest version)
 if current_os == "Linux":
     options.binary_location = "/usr/bin/microsoft-edge-stable"
 
